@@ -122,6 +122,23 @@
     letter-spacing: 0.6px;
     text-transform: uppercase;
     user-select: none;
+    cursor: pointer;
+    overflow: hidden;
+    padding: 2px;
+    background: transparent;
+  }
+
+  .logo-slot:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: #f0fdfa;
+  }
+
+  .logo-slot img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    display: block;
   }
 
   .company {
@@ -311,6 +328,8 @@
     .logo-slot {
       border: 0;
       color: transparent;
+      background: transparent;
+      cursor: default;
     }
     .row.multi .multiline {
       min-height: 0;
@@ -338,9 +357,12 @@
   <div class="brand">Surat Jalan Retur Penjualan</div>
   <div class="actions">
     <span class="save-note" id="saveNote">Tersimpan otomatis</span>
+    <button type="button" class="btn" id="logoBtn">Tambah Logo</button>
     <button type="button" class="btn" id="addRowBtn">+ Baris Barang</button>
+    <button type="button" class="btn btn-ghost" id="downloadBtn">Download JSON</button>
     <button type="button" class="btn btn-ghost" id="clearBtn">Kosongkan</button>
     <button type="button" class="btn btn-primary" id="printBtn">Cetak / Simpan PDF</button>
+    <input type="file" id="logoInput" accept="image/*" hidden />
   </div>
 </div>
 
@@ -348,8 +370,7 @@
 
   <!-- KOP -->
   <header class="doc-head">
-    <!-- Slot logo sengaja dikosongkan -->
-    <div class="logo-slot" id="logoSlot" aria-hidden="true">Logo</div>
+    <button type="button" class="logo-slot" id="logoSlot" title="Klik untuk menambah logo, klik kanan untuk menghapus">Logo</button>
 
     <div class="company">
       <input class="line center" id="companyAddress" aria-label="Alamat perusahaan" value="Embong Wungu 9, Surabaya" />
@@ -435,7 +456,7 @@ SERANG BANTEN, Indonesia
     </table>
   </div>
 
-  <div class="hint no-print">Klik teks mana pun untuk mengubah isinya. Data tersimpan otomatis di perangkat ini.</div>
+  <div class="hint no-print">Klik teks atau kotak Logo untuk mengubah isinya. Data tersimpan otomatis di perangkat ini.</div>
 </div>
 
 <script>
@@ -456,6 +477,7 @@ SERANG BANTEN, Indonesia
   ];
 
   const defaults = {
+    logo: "",
     companyAddress: "Embong Wungu 9, Surabaya",
     companyPhone: "(031) 548-2000",
     noSuratJalan: "SDO202111000002",
@@ -471,6 +493,8 @@ SERANG BANTEN, Indonesia
 
   const itemsBody = document.getElementById("itemsBody");
   const saveNote = document.getElementById("saveNote");
+  const logoSlot = document.getElementById("logoSlot");
+  const logoInput = document.getElementById("logoInput");
 
   let state = loadState();
   let saveTimer = null;
@@ -494,7 +518,16 @@ SERANG BANTEN, Indonesia
     return JSON.parse(JSON.stringify(obj));
   }
 
+  function renderLogo() {
+    if (state.logo) {
+      logoSlot.innerHTML = `<img src="${escapeAttr(state.logo)}" alt="Logo perusahaan" />`;
+    } else {
+      logoSlot.textContent = "Logo";
+    }
+  }
+
   function fillFields() {
+    renderLogo();
     fieldIds.forEach((id) => {
       const el = document.getElementById(id);
       if (!el) return;
@@ -548,7 +581,7 @@ SERANG BANTEN, Indonesia
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       saveNote.textContent = "Tersimpan otomatis";
     } catch (e) {
-      saveNote.textContent = "Gagal menyimpan";
+      saveNote.textContent = "Gagal menyimpan (cek ukuran file)";
     }
   }
 
@@ -574,6 +607,43 @@ SERANG BANTEN, Indonesia
   fillFields();
   renderItems();
 
+  // Tambah & hapus logo
+  document.getElementById("logoBtn").addEventListener("click", function () {
+    logoInput.click();
+  });
+
+  logoSlot.addEventListener("click", function () {
+    logoInput.click();
+  });
+
+  logoSlot.addEventListener("contextmenu", function (e) {
+    if (!state.logo) return;
+    e.preventDefault();
+    if (confirm("Hapus logo perusahaan?")) {
+      state.logo = "";
+      renderLogo();
+      saveNow();
+    }
+  });
+
+  logoInput.addEventListener("change", function (e) {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    if (file.size > 1024 * 1024) {
+      alert("Ukuran logo maksimal 1 MB agar penyimpanan otomatis tetap lancar.");
+      logoInput.value = "";
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = function () {
+      state.logo = String(reader.result || "");
+      renderLogo();
+      saveNow();
+      logoInput.value = "";
+    };
+    reader.readAsDataURL(file);
+  });
+
   // Ketik di field atas
   fieldIds.forEach((id) => {
     const el = document.getElementById(id);
@@ -581,7 +651,7 @@ SERANG BANTEN, Indonesia
     el.addEventListener("input", scheduleSave);
   });
 
-  // Tempel teks polos di alamat (jangan bawa format dari luar)
+  // Tempel teks polos di alamat
   const dariEl = document.getElementById("dari");
   dariEl.addEventListener("paste", function (e) {
     e.preventDefault();
@@ -612,7 +682,6 @@ SERANG BANTEN, Indonesia
     const btn = e.target.closest(".row-del");
     if (!btn) return;
     if (itemsBody.querySelectorAll("tr").length <= 1) {
-      // Minimal satu baris: kosongkan saja
       const tr = btn.closest("tr");
       tr.querySelectorAll(".cell").forEach((c) => (c.value = ""));
     } else {
@@ -631,10 +700,26 @@ SERANG BANTEN, Indonesia
     scheduleSave();
   });
 
+  // Download data JSON
+  document.getElementById("downloadBtn").addEventListener("click", function () {
+    saveNow();
+    const cleanNo = (state.noSuratJalan || "dokumen").replace(/[^a-zA-Z0-9_-]+/g, "_");
+    const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `surat-jalan-retur-${cleanNo}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
+
   // Kosongkan
   document.getElementById("clearBtn").addEventListener("click", function () {
     if (!confirm("Kosongkan semua isian form?")) return;
     const blank = clone(defaults);
+    blank.logo = "";
     blank.noSuratJalan = "";
     blank.noPesanan = "";
     blank.tanggal = "";
@@ -652,7 +737,7 @@ SERANG BANTEN, Indonesia
 
   // Cetak
   document.getElementById("printBtn").addEventListener("click", function () {
-    collect();
+    saveNow();
     window.print();
   });
 
