@@ -623,8 +623,8 @@ SERANG BANTEN, Indonesia
 
   // Tambah baris
   document.getElementById("addRowBtn").addEventListener("click", function () {
-    state.items = state.items.concat({ kode: "", nama: "", jumlah: "" });
     collect();
+    state.items.push({ kode: "", nama: "", jumlah: "" });
     renderItems();
     const last = itemsBody.querySelector("tr:last-child [data-field='kode']");
     if (last) last.focus();
