@@ -122,23 +122,6 @@
     letter-spacing: 0.6px;
     text-transform: uppercase;
     user-select: none;
-    cursor: pointer;
-    overflow: hidden;
-    padding: 2px;
-    background: transparent;
-  }
-
-  .logo-slot:hover {
-    border-color: var(--accent);
-    color: var(--accent);
-    background: #f0fdfa;
-  }
-
-  .logo-slot img {
-    max-width: 100%;
-    max-height: 100%;
-    object-fit: contain;
-    display: block;
   }
 
   .company {
@@ -328,8 +311,6 @@
     .logo-slot {
       border: 0;
       color: transparent;
-      background: transparent;
-      cursor: default;
     }
     .row.multi .multiline {
       min-height: 0;
@@ -337,6 +318,47 @@
     table { page-break-inside: auto; }
     tr { page-break-inside: avoid; }
   }
+
+  /* ---------- Mode unduh PDF (html2pdf) ---------- */
+  body.exporting { background: #ffffff; }
+
+  body.exporting .no-print { display: none !important; }
+
+  body.exporting .page {
+    width: 210mm;
+    min-height: 0;
+    margin: 0;
+    padding: 14mm 16mm;
+    box-shadow: none;
+    font-size: 11.5px;
+  }
+
+  body.exporting .line:hover,
+  body.exporting .line:focus,
+  body.exporting .cell:hover,
+  body.exporting .cell:focus,
+  body.exporting .row.multi .multiline:hover,
+  body.exporting .row.multi .multiline:focus {
+    background: transparent;
+    box-shadow: none;
+  }
+
+  body.exporting .logo-slot {
+    border: 0;
+    color: transparent;
+  }
+
+  body.exporting .row.multi .multiline { min-height: 0; }
+
+  /* Kunci tata letak desktop saat layar kecil */
+  body.exporting .doc-head { grid-template-columns: 128px 1fr 200px; }
+  body.exporting .doc-title {
+    grid-column: auto;
+    text-align: right;
+    margin-top: 0;
+  }
+  body.exporting .cols { grid-template-columns: 1.6fr 1fr; }
+  body.exporting .row { grid-template-columns: 108px 10px 1fr; }
 
   @media screen and (max-width: 820px) {
     .page {
@@ -357,12 +379,10 @@
   <div class="brand">Surat Jalan Retur Penjualan</div>
   <div class="actions">
     <span class="save-note" id="saveNote">Tersimpan otomatis</span>
-    <button type="button" class="btn" id="logoBtn">Tambah Logo</button>
     <button type="button" class="btn" id="addRowBtn">+ Baris Barang</button>
-    <button type="button" class="btn btn-ghost" id="downloadBtn">Download JSON</button>
     <button type="button" class="btn btn-ghost" id="clearBtn">Kosongkan</button>
-    <button type="button" class="btn btn-primary" id="printBtn">Cetak / Simpan PDF</button>
-    <input type="file" id="logoInput" accept="image/*" hidden />
+    <button type="button" class="btn btn-ghost" id="printBtn">Cetak</button>
+    <button type="button" class="btn btn-primary" id="downloadPdfBtn">Download PDF</button>
   </div>
 </div>
 
@@ -370,7 +390,8 @@
 
   <!-- KOP -->
   <header class="doc-head">
-    <button type="button" class="logo-slot" id="logoSlot" title="Klik untuk menambah logo, klik kanan untuk menghapus">Logo</button>
+    <!-- Slot logo sengaja dikosongkan -->
+    <div class="logo-slot" id="logoSlot" aria-hidden="true">Logo</div>
 
     <div class="company">
       <input class="line center" id="companyAddress" aria-label="Alamat perusahaan" value="Embong Wungu 9, Surabaya" />
@@ -456,9 +477,10 @@ SERANG BANTEN, Indonesia
     </table>
   </div>
 
-  <div class="hint no-print">Klik teks atau kotak Logo untuk mengubah isinya. Data tersimpan otomatis di perangkat ini.</div>
+  <div class="hint no-print">Klik teks mana pun untuk mengubah isinya. Data tersimpan otomatis di perangkat ini.</div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script>
 (function () {
   const STORAGE_KEY = "surat-jalan-retur-v1";
@@ -477,7 +499,6 @@ SERANG BANTEN, Indonesia
   ];
 
   const defaults = {
-    logo: "",
     companyAddress: "Embong Wungu 9, Surabaya",
     companyPhone: "(031) 548-2000",
     noSuratJalan: "SDO202111000002",
@@ -493,8 +514,6 @@ SERANG BANTEN, Indonesia
 
   const itemsBody = document.getElementById("itemsBody");
   const saveNote = document.getElementById("saveNote");
-  const logoSlot = document.getElementById("logoSlot");
-  const logoInput = document.getElementById("logoInput");
 
   let state = loadState();
   let saveTimer = null;
@@ -518,16 +537,7 @@ SERANG BANTEN, Indonesia
     return JSON.parse(JSON.stringify(obj));
   }
 
-  function renderLogo() {
-    if (state.logo) {
-      logoSlot.innerHTML = `<img src="${escapeAttr(state.logo)}" alt="Logo perusahaan" />`;
-    } else {
-      logoSlot.textContent = "Logo";
-    }
-  }
-
   function fillFields() {
-    renderLogo();
     fieldIds.forEach((id) => {
       const el = document.getElementById(id);
       if (!el) return;
@@ -581,7 +591,7 @@ SERANG BANTEN, Indonesia
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       saveNote.textContent = "Tersimpan otomatis";
     } catch (e) {
-      saveNote.textContent = "Gagal menyimpan (cek ukuran file)";
+      saveNote.textContent = "Gagal menyimpan";
     }
   }
 
@@ -607,43 +617,6 @@ SERANG BANTEN, Indonesia
   fillFields();
   renderItems();
 
-  // Tambah & hapus logo
-  document.getElementById("logoBtn").addEventListener("click", function () {
-    logoInput.click();
-  });
-
-  logoSlot.addEventListener("click", function () {
-    logoInput.click();
-  });
-
-  logoSlot.addEventListener("contextmenu", function (e) {
-    if (!state.logo) return;
-    e.preventDefault();
-    if (confirm("Hapus logo perusahaan?")) {
-      state.logo = "";
-      renderLogo();
-      saveNow();
-    }
-  });
-
-  logoInput.addEventListener("change", function (e) {
-    const file = e.target.files && e.target.files[0];
-    if (!file) return;
-    if (file.size > 1024 * 1024) {
-      alert("Ukuran logo maksimal 1 MB agar penyimpanan otomatis tetap lancar.");
-      logoInput.value = "";
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = function () {
-      state.logo = String(reader.result || "");
-      renderLogo();
-      saveNow();
-      logoInput.value = "";
-    };
-    reader.readAsDataURL(file);
-  });
-
   // Ketik di field atas
   fieldIds.forEach((id) => {
     const el = document.getElementById(id);
@@ -651,7 +624,7 @@ SERANG BANTEN, Indonesia
     el.addEventListener("input", scheduleSave);
   });
 
-  // Tempel teks polos di alamat
+  // Tempel teks polos di alamat (jangan bawa format dari luar)
   const dariEl = document.getElementById("dari");
   dariEl.addEventListener("paste", function (e) {
     e.preventDefault();
@@ -682,6 +655,7 @@ SERANG BANTEN, Indonesia
     const btn = e.target.closest(".row-del");
     if (!btn) return;
     if (itemsBody.querySelectorAll("tr").length <= 1) {
+      // Minimal satu baris: kosongkan saja
       const tr = btn.closest("tr");
       tr.querySelectorAll(".cell").forEach((c) => (c.value = ""));
     } else {
@@ -700,26 +674,10 @@ SERANG BANTEN, Indonesia
     scheduleSave();
   });
 
-  // Download data JSON
-  document.getElementById("downloadBtn").addEventListener("click", function () {
-    saveNow();
-    const cleanNo = (state.noSuratJalan || "dokumen").replace(/[^a-zA-Z0-9_-]+/g, "_");
-    const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `surat-jalan-retur-${cleanNo}.json`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  });
-
   // Kosongkan
   document.getElementById("clearBtn").addEventListener("click", function () {
     if (!confirm("Kosongkan semua isian form?")) return;
     const blank = clone(defaults);
-    blank.logo = "";
     blank.noSuratJalan = "";
     blank.noPesanan = "";
     blank.tanggal = "";
@@ -737,8 +695,59 @@ SERANG BANTEN, Indonesia
 
   // Cetak
   document.getElementById("printBtn").addEventListener("click", function () {
-    saveNow();
+    collect();
     window.print();
+  });
+
+  // Unduh PDF langsung (tanpa dialog print)
+  document.getElementById("downloadPdfBtn").addEventListener("click", async function () {
+    if (typeof html2pdf === "undefined") {
+      alert("Komponen PDF belum termuat. Periksa koneksi internet lalu coba lagi.");
+      return;
+    }
+
+    const btn = this;
+    const label = btn.textContent;
+    saveNow();
+
+    btn.disabled = true;
+    btn.textContent = "Menyiapkan...";
+    document.body.classList.add("exporting");
+
+    try {
+      // beri waktu browser menghitung ulang tata letak
+      await new Promise((r) => setTimeout(r, 80));
+
+      const nomor = String(state.noSuratJalan || "").trim();
+      const safeName = nomor ? nomor.replace(/[^A-Za-z0-9._-]+/g, "-") : "tanpa-nomor";
+
+      await html2pdf()
+        .set({
+          margin: 0,
+          filename: "surat-jalan-retur-" + safeName + ".pdf",
+          image: { type: "jpeg", quality: 0.98 },
+          html2canvas: {
+            scale: 3,
+            useCORS: true,
+            backgroundColor: "#ffffff",
+            scrollX: 0,
+            scrollY: 0,
+            onclone: function (doc) {
+              doc.body.classList.add("exporting");
+            },
+          },
+          jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+          pagebreak: { mode: ["css", "legacy"] },
+        })
+        .from(document.getElementById("page"))
+        .save();
+    } catch (e) {
+      alert("Gagal membuat PDF: " + (e && e.message ? e.message : e));
+    } finally {
+      document.body.classList.remove("exporting");
+      btn.disabled = false;
+      btn.textContent = label;
+    }
   });
 
   // Pastikan data terakhir tersimpan
